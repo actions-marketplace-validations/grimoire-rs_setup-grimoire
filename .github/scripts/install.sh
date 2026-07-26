@@ -48,7 +48,14 @@ main() {
     # "$auth_header"}` form relied on IFS containing a space and breaks under
     # the IFS set above. Never empty, so `"${curl_args[@]}"` is safe under
     # `set -u` on macOS's bash 3.2.
-    curl_args=(--proto '=https' --tlsv1.2 -LsSf)
+    # --retry covers only transient failures: timeouts, refused connections and
+    # 408/429/5xx. A 404 still fails on the first attempt, so the .tar.gz
+    # fallback below stays instant.
+    #
+    # Never add --retry-all-errors. It reclassifies that 404 as retryable and
+    # costs 3 x 2 s PER EXTENSION on every fallback — a 12-second stall on the
+    # normal path, in exchange for retrying an error that cannot go away.
+    curl_args=(--proto '=https' --tlsv1.2 --retry 3 --retry-delay 2 --retry-connrefused -LsSf)
     if [[ -n "$auth_header" ]]; then
         curl_args+=(-H "$auth_header")
     fi

@@ -11,6 +11,10 @@ setup() {
     SRV="$BATS_TEST_TMPDIR/srv"
     mkdir -p "$SRV"
 
+    # Armed by writing a path fragment into it; see helpers/server.bash.
+    FLAKY_ONCE="$BATS_TEST_TMPDIR/flaky-once"
+    export GRIM_FIXTURE_FLAKY_ONCE="$FLAKY_ONCE"
+
     local _out
     _out="$(server_start "$SRV" "$BATS_TEST_TMPDIR/server.log")" || {
         echo "$_out"
@@ -45,6 +49,20 @@ teardown() {
     # every platform, so this is deterministic, not a race. Measured on bash
     # 5.3: 348 KB of producer output failed 3/3, 79 KB passed 3/3.
     server_build_release "$SRV" v0.0.0 tar.xz 4000 >/dev/null
+
+    run bash "$INSTALL_SH"
+    assert_success
+
+    run "$RUNNER_TEMP/grim-bin/grim" --version
+    assert_output "grim 0.0.0"
+}
+
+@test "a transient 503 on the archive is retried, not treated as missing" {
+    # Only .tar.xz is published, and the mirror 503s the first request for it.
+    # Without --retry that is indistinguishable from a missing asset: the loop
+    # moves on to .tar.gz, 404s, and the run dies claiming no archive exists.
+    server_build_release "$SRV" v0.0.0 tar.xz >/dev/null
+    printf '.tar.xz' >"$FLAKY_ONCE"
 
     run bash "$INSTALL_SH"
     assert_success

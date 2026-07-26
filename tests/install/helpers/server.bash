@@ -15,6 +15,12 @@
 #
 # Set GRIM_FIXTURE_HEADER_LOG before server_start to have every request's
 # headers appended to that file (used to prove the auth header is sent).
+#
+# Set GRIM_FIXTURE_FLAKY_ONCE to a control-file path before server_start to arm
+# the transient-failure hatch: while that file exists, the FIRST request whose
+# path contains the file's contents is answered 503, and every later request for
+# the same path succeeds. It is a file, not an env var, so a test can arm it
+# after the server is already running.
 
 # Directory containing this helper (and the vendored test cert), located from
 # this file's own path so suites at any depth under tests/install/ work.
@@ -46,12 +52,21 @@ server_start() {
 import http.server, ssl, os, sys, socketserver
 cert = os.environ["GRIM_FIXTURE_CERT"]
 header_log = os.environ.get("GRIM_FIXTURE_HEADER_LOG")
+flaky_file = os.environ.get("GRIM_FIXTURE_FLAKY_ONCE")
+failed_once = set()
 
 class Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         if header_log:
             with open(header_log, "a") as fh:
                 fh.write("%s %s\n%s\n" % (self.command, self.path, self.headers))
+        if flaky_file and os.path.exists(flaky_file):
+            with open(flaky_file) as fh:
+                pattern = fh.read().strip()
+            if pattern and pattern in self.path and self.path not in failed_once:
+                failed_once.add(self.path)
+                self.send_error(503)
+                return
         return super().do_GET()
 
 class _Srv(http.server.HTTPServer):

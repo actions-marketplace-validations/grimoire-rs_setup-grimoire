@@ -89,17 +89,31 @@ function Start-FixtureServer {
     $errLog = Join-Path $Root 'srv.err.log'
     $headerLog = Join-Path $Root 'headers.log'
     Set-Content -Path $headerLog -Value '' -NoNewline
+    $flakyFile = Join-Path $Root 'flaky-once'
+    Remove-Item -Force $flakyFile -ErrorAction SilentlyContinue
 
     $serverPy = Join-Path $Root 'fixture-server.py'
     $pyBody = @'
 import http.server, os, socketserver
 
 header_log = os.environ["GRIM_FIXTURE_HEADER_LOG"]
+# While this file exists, the FIRST request whose path contains its contents is
+# answered 503 and every later request for that path succeeds. A file, not an
+# env var, so a test can arm it after the server is already running.
+flaky_file = os.environ["GRIM_FIXTURE_FLAKY_ONCE"]
+failed_once = set()
 
 class Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         with open(header_log, "a") as fh:
             fh.write("%s %s\n%s\n" % (self.command, self.path, self.headers))
+        if os.path.exists(flaky_file):
+            with open(flaky_file) as fh:
+                pattern = fh.read().strip()
+            if pattern and pattern in self.path and self.path not in failed_once:
+                failed_once.add(self.path)
+                self.send_error(503)
+                return
         return super().do_GET()
 
 with socketserver.TCPServer(('127.0.0.1', 0), Handler) as httpd:
@@ -109,6 +123,7 @@ with socketserver.TCPServer(('127.0.0.1', 0), Handler) as httpd:
     [System.IO.File]::WriteAllText($serverPy, $pyBody)
 
     $env:GRIM_FIXTURE_HEADER_LOG = $headerLog
+    $env:GRIM_FIXTURE_FLAKY_ONCE = $flakyFile
     $proc = Start-Process -FilePath $python `
         -ArgumentList '-u', $serverPy `
         -WorkingDirectory $srvRoot `
@@ -137,6 +152,7 @@ with socketserver.TCPServer(('127.0.0.1', 0), Handler) as httpd:
         Port      = $port
         BaseUrl   = "http://127.0.0.1:$port"
         HeaderLog = $headerLog
+        FlakyFile = $flakyFile
     }
 }
 
