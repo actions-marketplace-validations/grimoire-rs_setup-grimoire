@@ -23,6 +23,13 @@ if ($version -ne 'latest' -and $version -notmatch $VersionPattern) {
     exit 1
 }
 $arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'aarch64' } else { 'x86_64' }
+# One asset name, no extension loop — deliberately asymmetric with install.sh,
+# which tries .tar.xz then .tar.gz. cargo-dist emits exactly one Windows
+# archive, so a second candidate would be dead code that costs 3 x 2 s of
+# -MaximumRetryCount on every install (PowerShell retries 404s) before falling
+# through to the real asset. If a second Windows format is ever published, this
+# is where the loop goes — and -MaximumRetryCount has to come off the probing
+# request when it does.
 $asset = "grimoire-$arch-pc-windows-msvc.zip"
 $base = if ($env:GRIM_RELEASE_BASE_URL) { $env:GRIM_RELEASE_BASE_URL } else { 'https://github.com/grimoire-rs/grimoire/releases' }
 $url = if ($version -eq 'latest') { "$base/latest/download/$asset" } else { "$base/download/$version/$asset" }
