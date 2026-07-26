@@ -1,0 +1,13 @@
+version: 2
+updates:
+  # Every `uses:` in this repo is pinned to a commit SHA. Without something
+  # opening the bump PRs, those pins are just stale versions with extra steps.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  # The vendored bats submodules under external/.
+  - package-ecosystem: gitsubmodule
+    directory: /
+    schedule:
+      interval: monthly
