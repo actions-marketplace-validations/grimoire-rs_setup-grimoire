@@ -34,26 +34,34 @@ if ($env:GRIM_RELEASE_AUTH_HEADER) {
 
 $tmp = Join-Path $env:RUNNER_TEMP ("grim-setup-" + [System.Guid]::NewGuid())
 New-Item -ItemType Directory -Path $tmp | Out-Null
-# PowerShell 6+ only, which the action guarantees: the step runs `pwsh`
-# explicitly, never Windows PowerShell 5.1. Note the asymmetry with install.sh:
-# PowerShell retries 404s too, which is harmless here because there is exactly
-# one Windows asset and so no extension fallback to stall.
-Invoke-WebRequest -Uri $url -Headers $headers -OutFile (Join-Path $tmp $asset) -MaximumRetryCount 3 -RetryIntervalSec 2
-Invoke-WebRequest -Uri "$url.sha256" -Headers $headers -OutFile (Join-Path $tmp "$asset.sha256") -MaximumRetryCount 3 -RetryIntervalSec 2
-$expected = (Get-Content (Join-Path $tmp "$asset.sha256") -Raw).Split(' ')[0].Trim()
-$actual = (Get-FileHash (Join-Path $tmp $asset) -Algorithm SHA256).Hash.ToLower()
-if ($expected.ToLower() -ne $actual) {
-    Write-Host "::error::checksum mismatch for $asset"
-    exit 1
-}
+# try/finally is this script's `trap ... EXIT`: the archive and its extracted
+# tree are removed however the script leaves. `exit 1` inside try still runs
+# finally, and each annotation is written before its exit, so nothing is lost.
+try {
+    # PowerShell 6+ only, which the action guarantees: the step runs `pwsh`
+    # explicitly, never Windows PowerShell 5.1. Note the asymmetry with
+    # install.sh: PowerShell retries 404s too, which is harmless here because
+    # there is exactly one Windows asset and so no extension fallback to stall.
+    Invoke-WebRequest -Uri $url -Headers $headers -OutFile (Join-Path $tmp $asset) -MaximumRetryCount 3 -RetryIntervalSec 2
+    Invoke-WebRequest -Uri "$url.sha256" -Headers $headers -OutFile (Join-Path $tmp "$asset.sha256") -MaximumRetryCount 3 -RetryIntervalSec 2
+    $expected = (Get-Content (Join-Path $tmp "$asset.sha256") -Raw).Split(' ')[0].Trim()
+    $actual = (Get-FileHash (Join-Path $tmp $asset) -Algorithm SHA256).Hash.ToLower()
+    if ($expected.ToLower() -ne $actual) {
+        Write-Host "::error::checksum mismatch for $asset"
+        exit 1
+    }
 
-Expand-Archive -Path (Join-Path $tmp $asset) -DestinationPath $tmp
-$found = Get-ChildItem -Path $tmp -Recurse -Filter grim.exe | Select-Object -First 1
-if (-not $found) {
-    Write-Host "::error::no grim.exe in $asset"
-    exit 1
+    Expand-Archive -Path (Join-Path $tmp $asset) -DestinationPath $tmp
+    $found = Get-ChildItem -Path $tmp -Recurse -Filter grim.exe | Select-Object -First 1
+    if (-not $found) {
+        Write-Host "::error::no grim.exe in $asset"
+        exit 1
+    }
+    $installDir = Join-Path $env:RUNNER_TEMP 'grim-bin'
+    New-Item -ItemType Directory -Force -Path $installDir | Out-Null
+    Copy-Item $found.FullName (Join-Path $installDir 'grim.exe')
+    Add-Content -Path $env:GITHUB_PATH -Value $installDir
 }
-$installDir = Join-Path $env:RUNNER_TEMP 'grim-bin'
-New-Item -ItemType Directory -Force -Path $installDir | Out-Null
-Copy-Item $found.FullName (Join-Path $installDir 'grim.exe')
-Add-Content -Path $env:GITHUB_PATH -Value $installDir
+finally {
+    Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
+}

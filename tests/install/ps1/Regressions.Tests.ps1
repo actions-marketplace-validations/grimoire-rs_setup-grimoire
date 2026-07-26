@@ -23,6 +23,20 @@ Describe 'install.ps1 regressions' {
         Remove-Item -Recurse -Force $Root -ErrorAction SilentlyContinue
     }
 
+    It 'removes its temp dir after a successful install' {
+        & pwsh -NoProfile -File $InstallPs1 | Out-Null
+        $LASTEXITCODE | Should -Be 0
+        @(Get-ChildItem -Path $Runner.RunnerTemp -Filter 'grim-setup-*') | Should -BeNullOrEmpty
+    }
+
+    It 'removes its temp dir after a failed install' {
+        New-GrimFixture -Root $Root -TamperChecksum | Out-Null
+
+        & pwsh -NoProfile -File $InstallPs1 2>&1 | Out-Null
+        $LASTEXITCODE | Should -Be 1
+        @(Get-ChildItem -Path $Runner.RunnerTemp -Filter 'grim-setup-*') | Should -BeNullOrEmpty
+    }
+
     It 'retries a transient 503 instead of failing the install' {
         Set-Content -Path $Srv.FlakyFile -Value '.zip' -NoNewline
 
