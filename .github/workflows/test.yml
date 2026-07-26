@@ -31,17 +31,103 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: .github/scripts/dco.sh "$BASE_SHA..$HEAD_SHA"
 
+  # A separate job from the test jobs on purpose: it runs beside them and so
+  # cannot gate or delay them, and a lint failure names itself in the checks
+  # list instead of hiding inside a test job's log.
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: go-task/setup-task@01a4adf9db2d14c1de7a560f09170b6e0df736aa # v2.1.0
+        with:
+          version: 3.x
+      # shellcheck, jq, yq and pwsh are on the image; shfmt and actionlint are
+      # not. Both are fetched at a pinned version and checksum-verified, which
+      # is the same guarantee a SHA-pinned action gives.
+      - name: Install shfmt
+        env:
+          SHFMT_VERSION: v3.13.1
+          SHFMT_SHA256: fb096c5d1ac6beabbdbaa2874d025badb03ee07929f0c9ff67563ce8c75398b1
+        run: |
+          set -euo pipefail
+          curl --proto '=https' --tlsv1.2 -LsSf -o shfmt \
+            "https://github.com/mvdan/sh/releases/download/${SHFMT_VERSION}/shfmt_${SHFMT_VERSION}_linux_amd64"
+          echo "${SHFMT_SHA256}  shfmt" | sha256sum -c -
+          sudo install -m 0755 shfmt /usr/local/bin/shfmt
+      - name: Install actionlint
+        env:
+          ACTIONLINT_VERSION: 1.7.12
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          set -euo pipefail
+          curl --proto '=https' --tlsv1.2 -LsSf -o actionlint.tar.gz \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  actionlint.tar.gz" | sha256sum -c -
+          tar -xzf actionlint.tar.gz actionlint
+          sudo install -m 0755 actionlint /usr/local/bin/actionlint
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          if (-not (Get-Module -ListAvailable PSScriptAnalyzer)) {
+              Install-Module PSScriptAnalyzer -Force -Scope CurrentUser -SkipPublisherCheck
+          }
+      - run: task lint
+
+  bats:
+    name: Bats (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # macOS is not redundant: it is the only leg running bash 3.2 and BSD
+        # find, which is what several of install.sh's constraints exist for.
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+      - uses: go-task/setup-task@01a4adf9db2d14c1de7a560f09170b6e0df736aa # v2.1.0
+        with:
+          version: 3.x
+      - run: task test:bats
+
+  pester:
+    name: Pester (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # install.ps1 only ever runs on Windows in production; ubuntu is here
+        # because pwsh is identical there and the leg is nearly free.
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: go-task/setup-task@01a4adf9db2d14c1de7a560f09170b6e0df736aa # v2.1.0
+        with:
+          version: 3.x
+      - run: task test:pester
+
   smoke:
+    name: Smoke (${{ matrix.os }}, ${{ matrix.version }})
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+        version: [latest]
+        include:
+          # The pinned-version path on a real runner. Every other cell resolves
+          # through GitHub's latest/download redirect, which is a different URL
+          # shape entirely.
+          - os: ubuntu-latest
+            version: v0.11.1
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: setup
         uses: ./
         with:
+          version: ${{ matrix.version }}
           # Exercises the mirror-input plumbing with the canonical default.
           release-base-url: https://github.com/grimoire-rs/grimoire/releases
       - name: grim runs
