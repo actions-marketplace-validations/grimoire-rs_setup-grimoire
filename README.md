@@ -48,6 +48,13 @@ verbatim). The `latest` version resolves via GitHub's
 `<base>/latest/download/` redirect, which mirrors typically don't
 implement — pin an exact `vX.Y.Z`.
 
+**The mirror must be HTTPS with a certificate the runner already trusts.**
+Downloads are fetched with `--proto '=https' --tlsv1.2`, so a plain-HTTP
+mirror is refused outright, and the action has no input for a private CA
+bundle. If your mirror's CA is internal, install it on the runner before
+this step — on Linux and macOS `curl` also honours `CURL_CA_BUNDLE`; the
+Windows step uses the machine certificate store.
+
 GitHub Enterprise Server instances without GitHub Connect cannot resolve
 `uses: grimoire-rs/setup-grimoire@v1` from github.com — fork or mirror
 this repository into your enterprise org (including tags) and reference
