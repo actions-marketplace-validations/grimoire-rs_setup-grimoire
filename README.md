@@ -1,9 +1,22 @@
+<div align="center">
+
+<img src="./assets/logo.png" width="192" />
+
 # setup-grimoire
 
-GitHub Action that installs the [grim](https://grimoire.rs) CLI —
-Grimoire, the OCI-backed package manager for AI skills and rules — on
-the runner and adds it to `PATH`. Linux, macOS, and Windows runners on
-`x86_64` and `aarch64`; archives are checksum-verified.
+**GitHub Action that installs the `grim` CLI on your runner —
+checksum-verified, on Linux, macOS and Windows**
+
+[![CI][ci-badge]][ci]
+[![Release][release-badge]][releases]
+[![License][license-badge]][license]
+
+</div>
+
+Installs [grim](https://grimoire.rs) — Grimoire, the OCI-backed package
+manager for AI skills and rules — and adds it to `PATH`. Linux, macOS and
+Windows runners on `x86_64` and `aarch64`; every archive is verified
+against the SHA-256 sidecar published beside it.
 
 ## Usage
 
@@ -81,3 +94,11 @@ irm https://setup.grimoire.rs/ps1 | iex
 ## License
 
 Apache-2.0
+
+<!-- badges -->
+[ci]: https://github.com/grimoire-rs/setup-grimoire/actions/workflows/test.yml
+[ci-badge]: https://github.com/grimoire-rs/setup-grimoire/actions/workflows/test.yml/badge.svg
+[releases]: https://github.com/grimoire-rs/setup-grimoire/releases
+[release-badge]: https://img.shields.io/github/v/release/grimoire-rs/setup-grimoire
+[license]: LICENSE
+[license-badge]: https://img.shields.io/badge/license-Apache--2.0-blue.svg
