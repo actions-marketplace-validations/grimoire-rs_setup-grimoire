@@ -9,7 +9,9 @@ branding:
 
 inputs:
   version:
-    description: grim release to install (`latest` or an exact `vX.Y.Z` tag)
+    description: >-
+      grim release to install: `latest`, an exact `vX.Y.Z` tag, or a
+      prerelease tag such as `v1.2.3-rc.1`
     required: false
     default: latest
   release-base-url:

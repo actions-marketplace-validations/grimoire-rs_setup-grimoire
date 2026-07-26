@@ -26,7 +26,7 @@ Describe 'install.ps1 failure paths' {
         $env:GRIM_RELEASE_BASE_URL = 'https://example.invalid/releases'
         $out = & pwsh -NoProfile -File $InstallPs1 2>&1 | Out-String
         $LASTEXITCODE | Should -Be 1
-        $out.Trim() | Should -Be "::error::version 'v1.2' must be 'latest' or vX.Y.Z"
+        $out.Trim() | Should -Be "::error::version 'v1.2' must be 'latest' or vX.Y.Z[-prerelease]"
     }
 
     It 'rejects a version that is not a tag at all' {
@@ -34,7 +34,7 @@ Describe 'install.ps1 failure paths' {
         $env:GRIM_RELEASE_BASE_URL = 'https://example.invalid/releases'
         $out = & pwsh -NoProfile -File $InstallPs1 2>&1 | Out-String
         $LASTEXITCODE | Should -Be 1
-        $out.Trim() | Should -Be "::error::version 'main' must be 'latest' or vX.Y.Z"
+        $out.Trim() | Should -Be "::error::version 'main' must be 'latest' or vX.Y.Z[-prerelease]"
     }
 
     It 'aborts on a checksum mismatch' {

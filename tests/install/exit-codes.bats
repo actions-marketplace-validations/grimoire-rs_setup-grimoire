@@ -45,7 +45,7 @@ teardown() {
 
     run bash "$INSTALL_SH"
     assert_failure 1
-    assert_output "::error::version 'v1.2' must be 'latest' or vX.Y.Z"
+    assert_output "::error::version 'v1.2' must be 'latest' or vX.Y.Z[-prerelease]"
 }
 
 @test "rejects a version that is not a tag at all" {
@@ -53,7 +53,7 @@ teardown() {
 
     run bash "$INSTALL_SH"
     assert_failure 1
-    assert_output "::error::version 'main' must be 'latest' or vX.Y.Z"
+    assert_output "::error::version 'main' must be 'latest' or vX.Y.Z[-prerelease]"
 }
 
 @test "rejects an unsupported platform" {

@@ -60,6 +60,15 @@ teardown() {
     assert_output "grim 0.0.0"
 }
 
+@test "installs a prerelease tag" {
+    server_build_release "$SRV" v0.0.0-rc.1 >/dev/null
+    export GRIM_SETUP_VERSION="v0.0.0-rc.1"
+
+    run bash "$INSTALL_SH"
+    assert_success
+    assert [ -x "$RUNNER_TEMP/grim-bin/grim" ]
+}
+
 @test "installs 'latest' from the latest/download path" {
     server_build_release "$SRV" v0.0.0 >/dev/null
     export GRIM_SETUP_VERSION="latest"

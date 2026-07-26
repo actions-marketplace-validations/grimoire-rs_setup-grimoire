@@ -17,7 +17,7 @@ IFS=$'\n\t'
 # which deliberately excludes prereleases and the moving v1 tag. Two
 # same-looking regexes, two different purposes, two different files. Loosening
 # one must not loosen the other.
-readonly VERSION_RE='^v[0-9]+\.[0-9]+\.[0-9]+$'
+readonly VERSION_RE='^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'
 
 main() {
     local version stem base auth_header tmp asset candidate ext url expected actual found install_dir
@@ -25,7 +25,7 @@ main() {
 
     version="${GRIM_SETUP_VERSION:-latest}"
     if [[ "$version" != "latest" && ! "$version" =~ $VERSION_RE ]]; then
-        echo "::error::version '$version' must be 'latest' or vX.Y.Z"
+        echo "::error::version '$version' must be 'latest' or vX.Y.Z[-prerelease]"
         exit 1
     fi
 

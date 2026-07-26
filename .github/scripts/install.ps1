@@ -15,11 +15,11 @@ $ErrorActionPreference = 'Stop'
 # which deliberately excludes prereleases and the moving v1 tag. Two
 # same-looking regexes, two different purposes, two different files. Loosening
 # one must not loosen the other.
-$VersionPattern = '^v\d+\.\d+\.\d+$'
+$VersionPattern = '^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$'
 
 $version = if ($env:GRIM_SETUP_VERSION) { $env:GRIM_SETUP_VERSION } else { 'latest' }
 if ($version -ne 'latest' -and $version -notmatch $VersionPattern) {
-    Write-Host "::error::version '$version' must be 'latest' or vX.Y.Z"
+    Write-Host "::error::version '$version' must be 'latest' or vX.Y.Z[-prerelease]"
     exit 1
 }
 $arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'aarch64' } else { 'x86_64' }

@@ -25,7 +25,7 @@ Pin a specific grim release:
 
 | Input | Default | Description |
 |---|---|---|
-| `version` | `latest` | grim release to install (`latest` or an exact `vX.Y.Z` tag) |
+| `version` | `latest` | grim release to install: `latest`, an exact `vX.Y.Z` tag, or a prerelease tag such as `v1.2.3-rc.1` |
 | `release-base-url` | GitHub releases | Download base for grim archives — see [Using a release mirror](#using-a-release-mirror) |
 | `release-auth-header` | `''` | Optional HTTP header for authenticated mirrors, e.g. `PRIVATE-TOKEN: ${{ secrets.MIRROR_TOKEN }}` |
 

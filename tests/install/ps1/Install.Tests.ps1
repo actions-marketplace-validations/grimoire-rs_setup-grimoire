@@ -30,6 +30,14 @@ Describe 'install.ps1' {
         (Get-Content $Runner.GithubPath -Raw).Trim() | Should -Be $Runner.InstallDir
     }
 
+    It 'installs a prerelease tag' {
+        New-GrimFixture -Root $Root -Tag 'v0.0.0-rc.1' | Out-Null
+        $env:GRIM_SETUP_VERSION = 'v0.0.0-rc.1'
+        & pwsh -NoProfile -File $InstallPs1 | Out-Null
+        $LASTEXITCODE | Should -Be 0
+        (Join-Path $Runner.InstallDir 'grim.exe') | Should -Exist
+    }
+
     It "installs 'latest' from the latest/download path" {
         $env:GRIM_SETUP_VERSION = 'latest'
         & pwsh -NoProfile -File $InstallPs1 | Out-Null
