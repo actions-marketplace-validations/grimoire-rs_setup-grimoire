@@ -57,6 +57,23 @@ teardown() {
     assert_output "grim 0.0.0"
 }
 
+@test "an uppercase checksum in the sidecar still verifies" {
+    # sha256sum and shasum both print lowercase, but nothing says a mirror's
+    # sidecar must. install.ps1 has always lowercased both sides; bash compared
+    # the two strings raw, so an uppercase sidecar failed the install with a
+    # checksum-mismatch annotation on a file that was in fact intact.
+    local asset sum
+    asset="$(server_build_release "$SRV" v0.0.0)"
+    sum="$(server_sha256 "$SRV/download/v0.0.0/$asset" | tr 'a-f' 'A-F')"
+    printf '%s  %s\n' "$sum" "$asset" >"$SRV/download/v0.0.0/$asset.sha256"
+
+    run bash "$INSTALL_SH"
+    assert_success
+
+    run "$RUNNER_TEMP/grim-bin/grim" --version
+    assert_output "grim 0.0.0"
+}
+
 @test "a transient 503 on the archive is retried, not treated as missing" {
     # Only .tar.xz is published, and the mirror 503s the first request for it.
     # Without --retry that is indistinguishable from a missing asset: the loop

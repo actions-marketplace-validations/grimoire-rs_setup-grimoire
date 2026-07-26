@@ -91,7 +91,10 @@ main() {
 
     # cargo-dist publishes a sibling .sha256 for every archive.
     curl "${curl_args[@]}" "$url.sha256" -o "$tmp/$asset.sha256"
-    expected="$(awk '{print $1}' "$tmp/$asset.sha256")"
+    # tolower in awk, not ${expected,,}: that expansion is bash 4+, and the
+    # macOS runner's /bin/bash is 3.2. sha256sum and shasum both print
+    # lowercase, so only the sidecar's side needs folding.
+    expected="$(awk '{print tolower($1)}' "$tmp/$asset.sha256")"
     actual="$(sha256sum "$tmp/$asset" 2>/dev/null | awk '{print $1}' ||
         shasum -a 256 "$tmp/$asset" | awk '{print $1}')"
     if [[ "$expected" != "$actual" ]]; then
