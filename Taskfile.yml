@@ -1,0 +1,109 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+#
+# The lint and test entry point, for humans and for CI alike: every check CI
+# runs is a `task` target here, so a green `task lint && task test` locally
+# means a green pipeline.
+#
+# Requires: shellcheck, shfmt, actionlint, pwsh (PSScriptAnalyzer + Pester),
+# python3, git. See CONTRIBUTING.md.
+
+version: '3'
+
+tasks:
+  default:
+    cmds:
+      - task: lint
+      - task: test
+
+  lint:
+    desc: Every static check CI runs
+    deps: [lint:sh, lint:ps1, lint:actions, lint:annotations]
+
+  lint:sh:
+    desc: shellcheck + shfmt over every shell script
+    cmds:
+      - shellcheck -S warning .github/scripts/install.sh .github/scripts/dco.sh site/sh
+      - shellcheck -S warning -s bash tests/install/helpers/*.bash
+      - shfmt -d -i 4 -ci .github/scripts/install.sh .github/scripts/dco.sh tests/install/helpers/*.bash
+
+  lint:ps1:
+    desc: PSScriptAnalyzer over the PowerShell installer and its tests
+    # Three rules are excluded, each because it is wrong here rather than
+    # inconvenient:
+    #   PSAvoidUsingWriteHost — ::error:: annotations MUST reach the workflow
+    #     log's stdout; Write-Output would make them part of a pipeline value.
+    #   PSUseShouldProcess... — the New-/Start-/Stop- fixture helpers are test
+    #     scaffolding, not cmdlets anyone calls with -WhatIf.
+    #   PSUseBOMForUnicodeEncodedFile — the non-ASCII is punctuation in
+    #     comments; a BOM would only appease the rule.
+    cmds:
+      - |
+        pwsh -NoProfile -Command '
+          $excl = @("PSAvoidUsingWriteHost", "PSUseShouldProcessForStateChangingFunctions",
+                    "PSUseBOMForUnicodeEncodedFile")
+          $r = @(".github/scripts/install.ps1", "tests/install/ps1") | ForEach-Object {
+            Invoke-ScriptAnalyzer -Path $_ -Recurse -Severity Warning, Error -ExcludeRule $excl
+          }
+          if ($r) { $r | Format-Table -AutoSize | Out-String | Write-Host; exit 1 }
+          Write-Host "PSScriptAnalyzer: clean"
+        '
+
+  lint:actions:
+    desc: actionlint over the workflows (and action.yml, reached through them)
+    cmds:
+      - actionlint
+
+  lint:annotations:
+    desc: 'Every ::error:: annotation is asserted by a test'
+    # The coverage gate. Rather than a line-coverage percentage, this asserts
+    # the property the tests actually exist for: no failure path ships without
+    # a test pinning its user-facing annotation. The prefix stops at the first
+    # interpolated variable, so a message reworded after the variable still
+    # slips through — the annotation identity is what the contract is made of.
+    cmds:
+      - |
+        missing=$(
+            grep -ho '::error::[^"$]*' .github/scripts/install.sh .github/scripts/install.ps1 |
+                sort -u |
+                while IFS= read -r prefix; do
+                    grep -rqF "$prefix" tests/install/ || echo "$prefix"
+                done
+        )
+        [ -z "$missing" ] || { echo "::error:: annotations with no test:"; echo "$missing"; exit 1; }
+        echo "annotation gate: every ::error:: prefix is asserted"
+
+  test:
+    desc: Run both installer suites
+    cmds:
+      - task: test:bats
+      - task: test:pester
+
+  test:bootstrap:
+    desc: Check out the vendored bats submodules
+    cmds:
+      - git submodule update --init --recursive external
+    status:
+      - test -f external/bats-core/bin/bats
+
+  test:bats:
+    desc: bats suites for install.sh
+    deps: [test:bootstrap]
+    cmds:
+      - external/bats-core/bin/bats -r tests/install/
+
+  test:pester:
+    desc: Pester suites for install.ps1
+    cmds:
+      - |
+        pwsh -NoProfile -Command '
+          $c = New-PesterConfiguration
+          $c.Run.Path = "tests/install/ps1"
+          $c.Run.Exit = $true
+          $c.Output.Verbosity = "Detailed"
+          Invoke-Pester -Configuration $c
+        '
+
+  fmt:
+    desc: Rewrite shell scripts with shfmt
+    cmds:
+      - shfmt -w -i 4 -ci .github/scripts/install.sh .github/scripts/dco.sh tests/install/helpers/*.bash

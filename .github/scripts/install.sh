@@ -82,8 +82,8 @@ main() {
     # cargo-dist publishes a sibling .sha256 for every archive.
     curl "${curl_args[@]}" "$url.sha256" -o "$tmp/$asset.sha256"
     expected="$(awk '{print $1}' "$tmp/$asset.sha256")"
-    actual="$(sha256sum "$tmp/$asset" 2>/dev/null | awk '{print $1}' \
-        || shasum -a 256 "$tmp/$asset" | awk '{print $1}')"
+    actual="$(sha256sum "$tmp/$asset" 2>/dev/null | awk '{print $1}' ||
+        shasum -a 256 "$tmp/$asset" | awk '{print $1}')"
     if [[ "$expected" != "$actual" ]]; then
         echo "::error::checksum mismatch for $asset"
         exit 1
