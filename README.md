@@ -9,6 +9,7 @@ checksum-verified, on Linux, macOS and Windows**
 
 [![CI][ci-badge]][ci]
 [![Release][release-badge]][releases]
+[![Marketplace][marketplace-badge]][marketplace]
 [![License][license-badge]][license]
 
 </div>
@@ -100,5 +101,7 @@ Apache-2.0
 [ci-badge]: https://github.com/grimoire-rs/setup-grimoire/actions/workflows/test.yml/badge.svg
 [releases]: https://github.com/grimoire-rs/setup-grimoire/releases
 [release-badge]: https://img.shields.io/github/v/release/grimoire-rs/setup-grimoire
+[marketplace]: https://github.com/marketplace/actions/setup-grimoire
+[marketplace-badge]: https://img.shields.io/badge/marketplace-setup--grimoire-blue?logo=github
 [license]: LICENSE
 [license-badge]: https://img.shields.io/badge/license-Apache--2.0-blue.svg
