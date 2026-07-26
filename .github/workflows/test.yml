@@ -5,12 +5,22 @@ on:
     branches: [main]
     paths-ignore: [site/**]
   pull_request:
+  # release.yml calls this suite before it moves any tag. Two consequences of
+  # being called, both correct as they stand: `dco` self-skips, because
+  # github.event_name is the CALLER's event; and paths-ignore does not apply to
+  # workflow_call, so a site/-only release still runs the full suite.
+  workflow_call:
 
 permissions:
   contents: read
 
+# A literal prefix, NOT github.workflow. In a called workflow that context
+# resolves to the CALLER's name, which would make this group byte-identical to
+# release.yml's: with cancel-in-progress false the called workflow would wait
+# forever on the caller that is waiting on it, and with true it would cancel its
+# own parent.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: test-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
