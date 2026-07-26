@@ -52,3 +52,24 @@ teardown() {
     run "$RUNNER_TEMP/grim-bin/grim" --version
     assert_output "grim 0.0.0"
 }
+
+@test "a truncated .tar.xz (200 with an empty body) falls through to .tar.gz" {
+    # A 404 is already handled — curl's exit code drives the fallback. The
+    # observable defect is a mirror that answers 200 with nothing: curl exits 0,
+    # the empty file is accepted as the asset, and tar explodes with no
+    # annotation. The sidecar below matches the empty file, so pre-fix the run
+    # gets all the way to tar rather than tripping over a missing checksum.
+    server_build_release "$SRV" v0.0.0 tar.gz >/dev/null
+
+    local stem empty
+    stem="$(server_detect_stem)"
+    empty="$BATS_TEST_TMPDIR/$stem.tar.xz"
+    : >"$empty"
+    server_publish "$SRV" v0.0.0 "$empty"
+
+    run bash "$INSTALL_SH"
+    assert_success
+
+    run "$RUNNER_TEMP/grim-bin/grim" --version
+    assert_output "grim 0.0.0"
+}

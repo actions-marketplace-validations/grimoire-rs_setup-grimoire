@@ -69,7 +69,10 @@ main() {
         else
             url="$base/download/$version/$candidate"
         fi
-        if curl "${curl_args[@]}" "$url" -o "$tmp/$candidate"; then
+        # Exit code AND size in one condition: a mirror that answers 200 with an
+        # empty body would otherwise be accepted as the asset, and tar would
+        # fail later with no annotation instead of falling through to .tar.gz.
+        if curl "${curl_args[@]}" "$url" -o "$tmp/$candidate" && [[ -s "$tmp/$candidate" ]]; then
             asset="$candidate"
             break
         fi
