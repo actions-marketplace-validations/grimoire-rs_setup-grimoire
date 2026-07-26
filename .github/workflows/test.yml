@@ -46,7 +46,11 @@ jobs:
           release-base-url: https://github.com/grimoire-rs/grimoire/releases
       - name: grim runs
         shell: bash
+        # Step outputs via env, not inline interpolation into the run: line —
+        # same rule the dco job already follows.
+        env:
+          REPORTED_VERSION: ${{ steps.setup.outputs.version }}
         run: |
           set -euo pipefail
           grim --version
-          echo "reported: ${{ steps.setup.outputs.version }}"
+          echo "reported: $REPORTED_VERSION"
