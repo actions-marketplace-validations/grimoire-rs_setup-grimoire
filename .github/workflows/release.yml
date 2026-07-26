@@ -1,0 +1,191 @@
+name: release
+
+# Pushing vX.Y.Z runs the suite against the tagged tree, moves the v1 pointer
+# and publishes the release — in that order, so a failure never leaves v1
+# stale while a release is out.
+#
+# Why v1 cannot retrigger this workflow — two guards, only one of them visible:
+#   1. The pattern below is anchored to the whole ref; `v1` fails at the first
+#      literal `.`.
+#   2. Pushes made with the default GITHUB_TOKEN do not create workflow runs at
+#      all. That guard vanishes silently the day someone swaps in a PAT or an
+#      App token — the usual reason being tag protection rules.
+#
+# If the trigger is ever loosened to include prereleases, see CONTRIBUTING.md:
+# `v1.3.0-rc.1` derives major `v1`, and moving the stable pointer to a release
+# candidate would put every @v1 consumer on an RC. The tag-move step is already
+# guarded for it; the recursion question has to be re-answered too.
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag to release, e.g. v1.2.0
+        required: true
+        type: string
+      dry_run:
+        description: Print what would happen without pushing or publishing
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+# Keyed on the tag, not github.ref: a workflow_dispatch runs with
+# ref=refs/heads/main, so ref-keyed grouping would collide across tags.
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.parse.outputs.tag }}
+      major: ${{ steps.parse.outputs.major }}
+      prerelease: ${{ steps.parse.outputs.prerelease }}
+      sha: ${{ steps.resolve.outputs.sha }}
+    steps:
+      # Before checkout, deliberately: on workflow_dispatch the tag is
+      # human-supplied and feeds checkout's ref:, so it is validated at the
+      # trust boundary and only the validated value is used afterwards.
+      #
+      # This regex is the actual enforcement — the push filter above is a glob,
+      # not a regex. It ALSO accepts a prerelease suffix, which the glob does
+      # not, so that the classification below is real rather than dead code.
+      - name: Parse the tag
+        id: parse
+        env:
+          RAW_TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$RAW_TAG" =~ ^v([0-9]+)\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+              echo "::error::tag '$RAW_TAG' is not a vX.Y.Z[-prerelease] release tag"
+              exit 1
+          fi
+          major="v${BASH_REMATCH[1]}"
+          prerelease=false
+          if [[ -n "${BASH_REMATCH[2]:-}" ]]; then
+              prerelease=true
+          fi
+          {
+              echo "tag=$RAW_TAG"
+              echo "major=$major"
+              echo "prerelease=$prerelease"
+          } >>"$GITHUB_OUTPUT"
+          echo "releasing $RAW_TAG; major tag $major; prerelease $prerelease"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.parse.outputs.tag }}
+          fetch-depth: 0
+
+      - name: Resolve the tagged commit
+        id: resolve
+        env:
+          TAG: ${{ steps.parse.outputs.tag }}
+          EVENT: ${{ github.event_name }}
+          PUSHED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          sha="$(git rev-parse "$TAG^{commit}")"
+          # On a push the tag that triggered the run must still point where it
+          # did. A mismatch means it moved between trigger and checkout, and the
+          # commit about to be released is not the one that was tested.
+          if [[ "$EVENT" == "push" && "$sha" != "$PUSHED_SHA" ]]; then
+              echo "::error::$TAG resolves to $sha but the push event carried $PUSHED_SHA"
+              exit 1
+          fi
+          echo "sha=$sha" >>"$GITHUB_OUTPUT"
+          echo "$TAG -> $sha"
+
+      # Not redundant with the lint job: actionlint only reads action.yml
+      # because test.yml says `uses: ./`. Change that one line and manifest
+      # coverage disappears silently. This checks the v1 contract specifically —
+      # the names consumers pin against.
+      #
+      # Names only. A changed default or a newly-required input still slips
+      # through; add a golden-file diff of the inputs block when that bites.
+      - name: Check the v1 contract in action.yml
+        run: |
+          set -euo pipefail
+          yq -e '.runs.using == "composite"' action.yml >/dev/null
+          for input in version release-base-url release-auth-header; do
+              yq -e ".inputs | has(\"$input\")" action.yml >/dev/null
+          done
+          yq -e '.outputs | has("version")' action.yml >/dev/null
+          echo "action.yml parses; the v1 input and output names are intact"
+
+  # Resolves at the caller's ref, so this is the tagged tree being tested. A red
+  # suite fails this job and blocks `release` through needs:.
+  test:
+    name: Test
+    needs: validate
+    uses: ./.github/workflows/test.yml
+
+  release:
+    name: Release
+    needs: [validate, test]
+    runs-on: ubuntu-latest
+    # The only job with write access. Everything above runs read-only.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.validate.outputs.sha }}
+          fetch-depth: 0
+
+      # Before the release is created, not after: if release creation fails, v1
+      # is already correct. The inverse — release published, v1 stale — is
+      # exactly the bug this workflow exists to end.
+      #
+      # Plain git, no third-party action in the write-scoped job. The tag is
+      # lightweight, like actions/checkout's own v4 and v7 refs, which also
+      # means no git config user.name/email is needed.
+      - name: Move the major tag
+        if: needs.validate.outputs.prerelease == 'false'
+        env:
+          MAJOR: ${{ needs.validate.outputs.major }}
+          SHA: ${{ needs.validate.outputs.sha }}
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
+        run: |
+          set -euo pipefail
+          git tag -f "$MAJOR" "$SHA"
+          if [[ "$DRY_RUN" == "true" ]]; then
+              echo "dry run — not pushing $MAJOR"
+              git push --force --dry-run origin "refs/tags/$MAJOR"
+          else
+              git push --force origin "refs/tags/$MAJOR"
+          fi
+
+      # gh, not softprops/action-gh-release: that action wraps the same
+      # GitHub-side note generator and would put a third-party JS action in the
+      # one job holding contents: write.
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.validate.outputs.tag }}
+          PRERELEASE: ${{ needs.validate.outputs.prerelease }}
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
+        run: |
+          set -euo pipefail
+          if [[ "$DRY_RUN" == "true" ]]; then
+              echo "dry run — release notes that would be generated for $TAG:"
+              gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+                  -f tag_name="$TAG" --jq '.name, .body'
+              exit 0
+          fi
+          # A re-run after a flaky test job must not fail on an existing release.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+              echo "release $TAG already exists — nothing to do"
+              exit 0
+          fi
+          args=(--verify-tag --generate-notes)
+          if [[ "$PRERELEASE" == "true" ]]; then
+              args+=(--prerelease)
+          fi
+          gh release create "$TAG" "${args[@]}"
