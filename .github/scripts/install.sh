@@ -90,7 +90,11 @@ main() {
     fi
 
     tar -xf "$tmp/$asset" -C "$tmp"
-    found="$(find "$tmp" -name grim -type f | head -1)"
+    # -print -quit, not `| head -1`: same first match, but no pipeline, so
+    # `set -o pipefail` has no SIGPIPE to propagate when find's output outruns
+    # the pipe buffer. -quit is in GNU and BSD find alike; the macOS bats leg is
+    # the proof.
+    found="$(find "$tmp" -name grim -type f -print -quit)"
     if [[ -z "$found" ]]; then
         echo "::error::no grim binary in $asset"
         exit 1

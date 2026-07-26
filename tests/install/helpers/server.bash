@@ -168,11 +168,13 @@ server_build_release() {
     chmod +x "$_build/$_stem/grim"
 
     # Additional files, all named `grim`, one per directory. `find -name grim`
-    # prints every one of them, which is what floods the pipe.
+    # prints every one of them, which is what floods the pipe. They are copies
+    # of the same stub, so the test does not depend on which one find returns
+    # first — readdir order is not something to assert on.
     _i=0
     while [ "$_i" -lt "$_extra" ]; do
         mkdir -p "$_build/$_stem/pad/$_i"
-        printf 'pad\n' >"$_build/$_stem/pad/$_i/grim"
+        cp "$_build/$_stem/grim" "$_build/$_stem/pad/$_i/grim"
         _i=$((_i + 1))
     done
 
